@@ -1,0 +1,2 @@
+g++ main.cpp -o ./build/app `pkg-config --cflags --libs opencv4`
+./build/app ./data/main/
