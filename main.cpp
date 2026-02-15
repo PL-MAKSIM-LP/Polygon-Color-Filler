@@ -34,50 +34,83 @@ int main(int argc, char **argv) {
     Profiler p("Main method");
     result = maskImage.clone();
     cv::cvtColor(maskImage, maskImage, cv::COLOR_BGR2GRAY);
-    cv::Mat maskPath =
-        cv::Mat::zeros(maskImage.rows + 2, maskImage.cols + 2, CV_8UC1);
+    cv::Mat maskPath;
+    cv::Mat tempMask;
+
+    maskPath = cv::Mat::zeros(maskImage.rows + 2, maskImage.cols + 2, CV_8UC1);
+    tempMask = cv::Mat::zeros(maskImage.rows + 2, maskImage.cols + 2, CV_8UC1);
 
     for (int y = 0; y < maskImage.rows; y++) {
-      const uchar *rowMaskImage = maskImage.ptr<uchar>(y);
-      const uchar *rowMaskPath = maskPath.ptr<uchar>(y + 1);
+      {
+        Profiler p("rows");
+        const uchar *rowMaskImage = maskImage.ptr<uchar>(y);
+        const uchar *rowMaskPath = maskPath.ptr<uchar>(y + 1);
 
-      for (int x = 0; x < maskImage.cols; ++x) {
-        uchar m = rowMaskImage[x];
-        if (m > 240 && rowMaskPath[x + 1] == 0) {
-          Region region;
-          region.seedPoint = cv::Point(x, y);
+        for (int x = 0; x < maskImage.cols; ++x) {
+          uchar m = rowMaskImage[x];
+          if (m > 240 && rowMaskPath[x + 1] == 0) {
+            Region region;
+            cv::Mat regionMask;
+            cv::Vec3b color;
+            cv::Rect rect;
 
-          cv::Rect rect;
-          {
-            Profiler p("first fill");
-            region.half = cv::floodFill(maskImage, maskPath, cv::Point(x, y), 0,
-                                        &rect, cv::Scalar(10), cv::Scalar(10),
-                                        4 | cv::FLOODFILL_MASK_ONLY) /
-                          2;
-          }
+            {
+              Profiler p(" region.seedPoint");
+              region.seedPoint = cv::Point(x, y);
+            }
+            {
+              Profiler p("setTo 1");
+              // ОЧИЩАЕМ временную маску перед использованием
+              tempMask.setTo(0);
+            }
 
-          cv::Vec3b color;
-          {
-            Profiler p("count pixels");
-            for (int y = rect.y; y < rect.y + rect.height; y++) {
+            {
+              Profiler p("floodFill first");
+              // Используем tempMask вместо maskPath!
+              int area = cv::floodFill(maskImage, tempMask, cv::Point(x, y), 0,
+                                       &rect, cv::Scalar(10), cv::Scalar(10),
+                                       4 | cv::FLOODFILL_MASK_ONLY);
+              region.half = area / 2;
+            }
 
-              const cv::Vec3b *row = colorImage.ptr<cv::Vec3b>(y);
-              const uchar *maskLine = maskPath.ptr<uchar>(y + 1);
+            {
+              Profiler p("regionMask = tempMask");
+              regionMask = tempMask(cv::Rect(rect.x + 1, rect.y + 1, rect.width,
+                                             rect.height))
+                               .clone();
+            }
+            {
+              Profiler p("addPixel");
+              // Используем regionMask вместо maskLine из maskPath
+              for (int ry = 0; ry < rect.height; ry++) {
+                const cv::Vec3b *row =
+                    colorImage.ptr<cv::Vec3b>(rect.y + ry) + rect.x;
+                const uchar *maskRow = regionMask.ptr<uchar>(ry);
 
-              for (int x = rect.x; x < rect.x + rect.width; x++) {
-                if (maskLine[x + 1] != 0) {
-                  region.addPixel(row[x]);
+                for (int rx = 0; rx < rect.width; rx++) {
+                  if (maskRow[rx] != 0) {
+                    region.addPixel(row[rx]);
+                  }
                 }
               }
             }
-          }
 
-          color = region.getMaxColor();
+            {
+              Profiler p("getMaxColor");
+              color = region.getMaxColor();
+            }
 
-          {
-            Profiler p("final fill");
-            cv::floodFill(result, cv::Point(x, y), region.getMaxColor(), &rect,
-                          cv::Scalar(0, 0, 0), cv::Scalar(0, 0, 0), 4);
+            {
+              Profiler p(" result(rect).setTo");
+              // Используем regionMask для быстрой заливки!
+              result(rect).setTo(color, regionMask);
+            }
+            {
+              Profiler p("floodFill last");
+              cv::floodFill(maskImage, maskPath, cv::Point(x, y), 0, &rect,
+                            cv::Scalar(10), cv::Scalar(10),
+                            4 | cv::FLOODFILL_MASK_ONLY);
+            }
           }
         }
       }
