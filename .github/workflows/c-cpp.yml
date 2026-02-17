@@ -1,0 +1,58 @@
+name: Manual Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      repeats:
+        description: "Number of repeats"
+        required: true
+        default: "5"
+        type: string
+
+      data_path:
+        description: "Path to data folder"
+        required: true
+        default: "./data/100x100/"
+        type: choice
+        options:
+          - ./data/100x100/
+          - ./data/200x200/
+          - ./data/main/
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential pkg-config libopencv-dev
+          sudo apt install -y python3 python3-pip
+          pip3 install matplotlib
+
+      - name: Run build script
+        run: |
+          chmod +x ./build.sh
+          ./build.sh
+        env:
+          DATA_PATH: ${{ github.event.inputs.data_path }}
+          REPEATS: ${{ github.event.inputs.repeats }}
+
+      - name: Copy result image to root
+        run: |
+          cp "${{ github.event.inputs.data_path }}_result.png" ./_result.png
+    
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-results
+          path: |
+            result.txt
+            execution_time.png
+            _result.png
+            
+
+        

@@ -6,8 +6,8 @@ fi
 > result.txt
 echo "$(grep 'model name' /proc/cpuinfo | uniq | awk -F': ' '{print $2}'), $(grep -c '^processor' /proc/cpuinfo) cores" >> result.txt 
 
-count=5
-folder="./data/main/"
+folder=${DATA_PATH:-"./data/main/"}
+count=${REPEATS:-5}
 
 echo OneThread_O0 >> result.txt 
 g++ main.cpp -O0 -o ./build/app  `pkg-config --cflags --libs opencv4` && echo "Run application with 0 level of optimization" && ./build/app $folder $count && echo
