@@ -1,12 +1,13 @@
-#include "Region.cpp"
-#include "constantes.cpp"
-#include "profiler.cpp"
-#include "utils.cpp"
+#include "./src/Constantes.cpp"
+#include "./src/FileHelper.cpp"
+#include "./src/Profiler.cpp"
+#include "./src/Region.cpp"
+#include "./src/Utils.cpp"
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <map>
 #include <opencv2/opencv.hpp>
-#include <sstream>
-#include <stack>
 #include <string>
 
 int main(int argc, char **argv) {
@@ -29,13 +30,13 @@ int main(int argc, char **argv) {
 
     cv::Mat maskImage = cv::imread(folder + maskPath, cv::IMREAD_COLOR);
     if (maskImage.empty()) {
-      std::cout << "Не удалось загрузить маску!" << std::endl;
+      std::cout << "Fail to load mask" << std::endl;
       return -1;
     }
 
     cv::Mat colorImage = cv::imread(folder + colorImagePath);
     if (colorImage.empty()) {
-      std::cout << "Не удалось загрузить изображение!" << std::endl;
+      std::cout << "Fail to load color image" << std::endl;
       return -1;
     }
 
@@ -120,6 +121,9 @@ int main(int argc, char **argv) {
       std::cout << "average time for: " << tm.first
                 << " spended: " << tm.second / repeats << std::endl;
     }
+
+    wtireResultToFile(repeats);
+
     cv::imwrite(folder + resultPath, result);
   }
 

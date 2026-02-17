@@ -1,12 +1,12 @@
-#include "Region.cpp"
-#include "constantes.cpp"
-#include "profiler.cpp"
-#include "utils.cpp"
+
+#include "./src/Constantes.cpp"
+#include "./src/FileHelper.cpp"
+#include "./src/Profiler.cpp"
+#include "./src/Region.cpp"
+#include "./src/Utils.cpp"
 #include <filesystem>
 #include <iostream>
 #include <opencv2/opencv.hpp>
-#include <sstream>
-#include <stack>
 #include <string>
 #include <thread>
 
@@ -20,13 +20,13 @@ void processSeed(Region &region, cv::Mat &maskImage, cv::Mat &tempMask,
   cv::Rect rect;
 
   {
-    Profiler p("floodFill first");
+    // Profiler p("floodFill first");
     cv::floodFill(maskImage, tempMask, region.seedPoint, 0, &rect,
                   cv::Scalar(10), cv::Scalar(10), 4 | cv::FLOODFILL_MASK_ONLY);
   }
 
   {
-    Profiler p("addPixel");
+    // Profiler p("addPixel");
     int startY = std::max(rect.y, 0);
     int endY = std::min(rect.y + rect.height, colorImage.rows);
     int startX = std::max(rect.x, 0);
@@ -48,7 +48,7 @@ void processSeed(Region &region, cv::Mat &maskImage, cv::Mat &tempMask,
   }
 
   {
-    Profiler p("floodFill last");
+    // Profiler p("floodFill last");
     color = region.getMaxColor();
     cv::floodFill(result, maskPath, region.seedPoint, color, &rect,
                   cv::Scalar(10), cv::Scalar(10), 4);
@@ -76,21 +76,29 @@ void processRows(int yStart, int yEnd, cv::Mat &maskImage, cv::Mat &tempMask,
 int main(int argc, char **argv) {
   std::filesystem::path dirPath = std::filesystem::path(argv[1]).parent_path();
   std::string folder = dirPath.string() + "/";
-  std::cout << folder << std::endl;
 
-  int repeats = 5;
+  int repeats;
+
+  try {
+    int value2 = std::stoi(argv[2]);
+    repeats = value2;
+    std::cout << "Use count of repeats: " << repeats << std::endl;
+  } catch (const std::exception &e) {
+    std::cerr << "Invalid number use default count of repeats: 5" << std::endl;
+    repeats = 5;
+  }
 
   for (int i = 0; i < repeats; ++i) {
 
     cv::Mat maskImage = cv::imread(folder + maskPath, cv::IMREAD_COLOR);
     if (maskImage.empty()) {
-      std::cout << "Не удалось загрузить маску!" << std::endl;
+      std::cout << "Fail to load mask" << std::endl;
       return -1;
     }
 
     cv::Mat colorImage = cv::imread(folder + colorImagePath);
     if (colorImage.empty()) {
-      std::cout << "Не удалось загрузить изображение!" << std::endl;
+      std::cout << "Fail to load color image" << std::endl;
       return -1;
     }
 
@@ -104,7 +112,6 @@ int main(int argc, char **argv) {
       cv::Mat tempMask =
           cv::Mat::zeros(maskImage.rows + 2, maskImage.cols + 2, CV_8UC1);
 
-      // --- Параллельная обработка ---
       int numThreads = std::thread::hardware_concurrency();
       int rowsPerThread = maskImage.rows / numThreads;
       std::vector<std::thread> threads;
@@ -131,6 +138,7 @@ int main(int argc, char **argv) {
                 << " spended: " << tm.second / repeats << std::endl;
     }
 
+    wtireResultToFile(repeats);
     cv::imwrite(folder + resultPath, result);
   }
 
