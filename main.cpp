@@ -9,123 +9,135 @@
 #include <map>
 #include <opencv2/opencv.hpp>
 #include <string>
+#include <thread>
+#include <vector>
+
+void processRegion(int x, int y, cv::Mat &maskImage, cv::Mat &currentRegionMask,
+                   cv::Mat &processedMask, cv::Mat &colorImage,
+                   cv::Mat &result);
+
+void processRows(int yStart, int yEnd, cv::Mat &maskImage,
+                 cv::Mat &processedMask, cv::Mat &colorImage, cv::Mat &result);
 
 int main(int argc, char **argv) {
+
   std::filesystem::path dirPath = std::filesystem::path(argv[1]).parent_path();
+
   std::string folder = dirPath.string() + "/";
 
-  // MergeImages(folder);
-  int repeats;
-
-  try {
-    int value2 = std::stoi(argv[2]);
-    repeats = value2;
-    std::cout << "Use count of repeats: " << repeats << std::endl;
-  } catch (const std::exception &e) {
-    std::cerr << "Invalid number use default count of repeats: 5" << std::endl;
-    repeats = 5;
-  }
+  int repeats = getRepeats(argc, argv);
+  cv::Mat result;
+  int numThreads = getNumberOfThreads(argc, argv);
+  std::cout << "Count of threads: " << numThreads << std::endl;
 
   for (int i = 0; i < repeats; ++i) {
 
-    cv::Mat maskImage = cv::imread(folder + maskPath, cv::IMREAD_COLOR);
-    if (maskImage.empty()) {
-      std::cout << "Fail to load mask" << std::endl;
-      return -1;
+    cv::Mat maskImage = loadImageOrExit(folder + maskPath, cv::IMREAD_COLOR);
+
+    cv::Mat colorImage =
+        loadImageOrExit(folder + colorImagePath, cv::IMREAD_COLOR);
+
+    Profiler p("Main method");
+
+    result = maskImage.clone();
+    cv::cvtColor(maskImage, maskImage, cv::COLOR_BGR2GRAY);
+
+    cv::Mat processedMask =
+        cv::Mat::zeros(maskImage.rows + 2, maskImage.cols + 2, CV_8UC1);
+
+    int rowsPerThread = maskImage.rows / numThreads;
+
+    std::vector<std::thread> threads;
+
+    for (int t = 0; t < numThreads; ++t) {
+
+      int yStart = t * rowsPerThread;
+
+      int yEnd =
+          (t == numThreads - 1) ? maskImage.rows : yStart + rowsPerThread;
+
+      threads.emplace_back(processRows, yStart, yEnd, std::ref(maskImage),
+                           std::ref(processedMask), std::ref(colorImage),
+                           std::ref(result));
     }
 
-    cv::Mat colorImage = cv::imread(folder + colorImagePath);
-    if (colorImage.empty()) {
-      std::cout << "Fail to load color image" << std::endl;
-      return -1;
-    }
+    for (auto &th : threads)
+      th.join();
+  }
 
-    cv::Mat result;
+  for (const auto &tm : timeMap) {
+    std::cout << "average time for: " << tm.first
+              << " spended: " << tm.second / repeats << std::endl;
+  }
 
-    {
-      Profiler p("Main method");
-      result = maskImage.clone();
-      cv::cvtColor(maskImage, maskImage, cv::COLOR_BGR2GRAY);
-      cv::Mat maskPath =
-          cv::Mat::zeros(maskImage.rows + 2, maskImage.cols + 2, CV_8UC1);
-      cv::Mat tempMask =
-          cv::Mat::zeros(maskImage.rows + 2, maskImage.cols + 2, CV_8UC1);
+  writeResultToFile(repeats);
+  cv::imwrite(folder + resultPath, result);
 
-      const cv::Vec3b *row;
-      uchar *maskRow;
-      Region region;
+  return 0;
+}
 
-      int count = 0;
-      for (int y = 0; y < maskImage.rows; ++y) {
-        {
-          // Profiler p("rows");
-          const uchar *rowMaskImage = maskImage.ptr<uchar>(y);
-          const uchar *rowMaskPath = maskPath.ptr<uchar>(y + 1);
+void processRegion(cv::Point seedPoint, cv::Mat &maskImage,
+                   cv::Mat &currentRegionMask, cv::Mat &processedMask,
+                   cv::Mat &colorImage, cv::Mat &result) {
+  Region region;
+  region.seedPoint = seedPoint;
+  cv::Rect rect;
+  cv::Vec3b color;
 
-          for (int x = 0; x < maskImage.cols; ++x) {
-            uchar m = rowMaskImage[x];
-            if (m >= 255 && rowMaskPath[x + 1] == 0) {
+  {
+    // Profiler p("Get region mask");
+    cv::floodFill(maskImage, currentRegionMask, region.seedPoint, 0, &rect,
+                  cv::Scalar(10), cv::Scalar(10), 4 | cv::FLOODFILL_MASK_ONLY);
+  }
 
-              cv::Mat regionMask;
-              cv::Vec3b color;
-              cv::Rect rect;
+  {
+    // Profiler p("Count color pixels");
+    int startY = std::max(rect.y, 0);
+    int endY = std::min(rect.y + rect.height, colorImage.rows);
+    int startX = std::max(rect.x, 0);
+    int endX = std::min(rect.x + rect.width, colorImage.cols);
 
-              region.seedPoint = cv::Point(x, y);
+    for (int ry = startY; ry < endY; ++ry) {
+      const cv::Vec3b *row = colorImage.ptr<cv::Vec3b>(ry);
+      uchar *maskRow = currentRegionMask.ptr<uchar>(ry + 1);
 
-              {
-                // Profiler p("floodFill first");
-                cv::floodFill(maskImage, tempMask, cv::Point(x, y), 0, &rect,
-                              cv::Scalar(10), cv::Scalar(10),
-                              4 | cv::FLOODFILL_MASK_ONLY);
-              }
-
-              {
-                // Profiler p("addPixel");
-                int startY = std::max(rect.y, 0);
-                int endY = std::min(rect.y + rect.height, colorImage.rows);
-                int startX = std::max(rect.x, 0);
-                int endX = std::min(rect.x + rect.width, colorImage.cols);
-
-                for (int ry = startY; ry < endY; ++ry) {
-                  row = colorImage.ptr<cv::Vec3b>(ry);
-                  maskRow = tempMask.ptr<uchar>(ry + 1);
-
-                  for (int rx = startX; rx < endX; ++rx) {
-                    if (maskRow[rx + 1] != 0) {
-                      {
-                        region.addPixel(row[rx]);
-                      }
-                      maskRow[rx + 1] = 0;
-                    }
-                  }
-                }
-              }
-
-              {
-                // Profiler p("floodFill last");
-                color = region.getMaxColor();
-                cv::floodFill(result, maskPath, region.seedPoint, color, &rect,
-                              cv::Scalar(10), cv::Scalar(10), 4);
-              }
-              region.clear();
-            }
-          }
+      for (int rx = startX; rx < endX; ++rx) {
+        if (maskRow[rx + 1] != 0) {
+          region.addPixel(row[rx]);
+          maskRow[rx + 1] = 0;
         }
       }
     }
-
-    if (i < repeats - 1)
-      continue;
-
-    for (const auto &tm : timeMap) {
-      std::cout << "average time for: " << tm.first
-                << " spended: " << tm.second / repeats << std::endl;
-    }
-
-    wtireResultToFile(repeats);
-
-    cv::imwrite(folder + resultPath, result);
   }
 
-  return 0;
+  {
+    // Profiler p("Fill result by color");
+    color = region.getMaxColor();
+    cv::floodFill(result, processedMask, region.seedPoint, color, &rect,
+                  cv::Scalar(10), cv::Scalar(10), 4);
+  }
+  region.clear();
+}
+
+void processRows(int yStart, int yEnd, cv::Mat &maskImage,
+                 cv::Mat &processedMask, cv::Mat &colorImage, cv::Mat &result) {
+
+  cv::Mat currentRegionMask =
+      cv::Mat::zeros(maskImage.rows + 2, maskImage.cols + 2, CV_8UC1);
+
+  for (int y = yStart; y < yEnd; ++y) {
+
+    const uchar *rowMaskImage = maskImage.ptr<uchar>(y);
+    const uchar *rowMaskPath = processedMask.ptr<uchar>(y + 1);
+
+    for (int x = 0; x < maskImage.cols; ++x) {
+
+      uchar m = rowMaskImage[x];
+
+      if (m >= 255 && rowMaskPath[x + 1] == 0) {
+        processRegion(cv::Point(x, y), maskImage, currentRegionMask,
+                      processedMask, colorImage, result);
+      }
+    }
+  }
 }

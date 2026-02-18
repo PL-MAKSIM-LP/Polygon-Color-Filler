@@ -6,7 +6,7 @@
 #include <iostream>
 #include <string>
 
-static void wtireResultToFile(int repeats = 1) {
+static void writeResultToFile(int repeats = 1) {
   std::string filename = "./result.txt";
   if (std::filesystem::exists(filename)) {
     std::ofstream outFile(filename, std::ios::app);

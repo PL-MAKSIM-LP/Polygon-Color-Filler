@@ -3,6 +3,7 @@
 #include <opencv2/opencv.hpp>
 #include <sstream>
 #include <string>
+#include <thread>
 
 int MergeImages(std::string folder) {
   cv::Mat color = cv::imread(folder + colorImagePath, cv::IMREAD_COLOR); // BGR
@@ -33,4 +34,34 @@ int MergeImages(std::string folder) {
   cv::imwrite(folder + combinedPath, result);
 
   return 0;
+}
+
+int getRepeats(int argc, char **argv) {
+  if (argc < 3)
+    return 5;
+  try {
+    return std::stoi(argv[2]);
+  } catch (...) {
+    std::cerr << "Invalid number, using default 5" << std::endl;
+    return 5;
+  }
+}
+
+int getNumberOfThreads(int argc, char **argv) {
+  int numThreads = 1;
+  if (argc > 3 && std::stoi(argv[3]) != 0) {
+    numThreads = std::thread::hardware_concurrency();
+    if (numThreads == 0)
+      numThreads = 1;
+  }
+  return numThreads;
+}
+
+cv::Mat loadImageOrExit(const std::string &path, int flags) {
+  cv::Mat img = cv::imread(path, flags);
+  if (img.empty()) {
+    std::cerr << "Fail to load: " << path << std::endl;
+    exit(-1);
+  }
+  return img;
 }

@@ -20,16 +20,16 @@
 Програма виконувала кожне завдання по 100 разів, і для статистики наведено середній час виконання задачі.
 
 ## Результат виконання завдання
-![Execution](ApplicationResult.png)
+![Execution](info/ApplicationResult.png)
 
 ### Для 2-х ядерного процессора
-![Execution](statistic_2_cores_100_repeats.png)
+![Execution](info/statistic_2_cores_100_repeats.png)
 
 ### Для 4-х ядерного процессора
-![Execution](statistic_4_cores_100_repeats.png)
+![Execution](info/statistic_4_cores_100_repeats.png)
 
 ### Для 8-ми ядерного процессора
-![Execution](statistic_8_cores_100_repeats.png)
+![Execution](info/statistic_8_cores_100_repeats.png)
 
 
 ## Aditional information:
@@ -44,21 +44,19 @@ g++ mergeFiles.cpp -O0 -o ./build/app  `pkg-config --cflags --libs opencv4`
 //Usage: app [path/to/folder]
 app ./data/100x100/
 ```
-**Результат виконання** - файл ```[path/to/folder]/_combined.png```, який об’єднує файли ```color_mask.png``` та ```mask.png``` з папки ```[path/to/folder]```.
-
+**Результат виконання** - файл ```[path/to/folder]/_combined.png```, який об’єднує файли ```color_mask.png``` та ```mask.png``` з папки ```[path/to/folder]```.<br>
+![Execution](./info/combined_sample.png)
 
 ---
 ```main.cpp``` - Створює виконуваний файл, який заповнює маску найчастішим кольором в сегменті.<br>
 ```
 g++ main.cpp -O0 -o ./build/app  `pkg-config --cflags --libs opencv4`
-//Usage: app [path/to/folder]
-app ./data/100x100/
+//Usage: app [path/to/folder] [count of repeats] [use thread]
+app ./data/100x100/ 10 1
 ```
+`count of repeats` - кількість повторень
+`use thread` - якщо вказано число >0 використовувати багатопоточність.<br>
 **Результат виконання** - файл  ```[path/to/folder]/_result.png``` який є результатом основного завдання — заповнення файлу ```mask.png``` ннайчастішим кольором сегменту з ```color_mask.png```.
-
----
-```mainMultithread.cpp``` - Аналогічно ```main.cpp```, але виконує обробку в декількох потоках.
-
 
 ---
 ```build.sh``` - Запускає збірку додатку, виконує сам додаток, а також скрипт для створення статистики.  
